@@ -3,6 +3,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from pathlib import Path
 from app.services import 目录, 装载, 关窗, 贯验, 夹具, 统计, 说明
+from app.modules import 迟到升格回放
 
 
 async def api_概览(request: Request):
@@ -40,6 +41,33 @@ async def api_切片(request: Request):
 
 async def api_迟到(request: Request):
     return JSONResponse(目录.迟到列表())
+
+
+async def api_升格只读(request: Request):
+    编号 = request.query_params.get("事件编号", "")
+    if not 编号:
+        return JSONResponse({"错误": "缺参数:事件编号"}, status_code=400)
+    q = request.query_params
+    目标窗 = None
+    if q.get("窗号") or q.get("窗起") or q.get("窗止"):
+        目标窗 = {"窗号": q.get("窗号", ""), "窗起": q.get("窗起", ""), "窗止": q.get("窗止", "")}
+    try:
+        return JSONResponse(迟到升格回放.升格只读(编号, 目标窗))
+    except ValueError as e:
+        return JSONResponse({"错误": str(e)}, status_code=400)
+
+
+async def api_升格回放(request: Request):
+    body = await request.json()
+    目标窗 = (body or {}).get("目标窗")
+    try:
+        return JSONResponse(迟到升格回放.升格回放(目标窗))
+    except ValueError as e:
+        return JSONResponse({"错误": str(e)}, status_code=400)
+
+
+async def api_升格归档(request: Request):
+    return JSONResponse(迟到升格回放.归档列表())
 
 
 async def api_贯验列表(request: Request):
@@ -99,6 +127,9 @@ async def api_空桩(request: Request):
     Route("/api/入窗缓冲", api_缓冲),
     Route("/api/窗切片账", api_切片),
     Route("/api/迟到匣", api_迟到),
+    Route("/api/迟到匣/升格只读", api_升格只读),
+    Route("/api/迟到匣/升格回放", api_升格回放, methods=["POST"]),
+    Route("/api/迟到匣/升格归档", api_升格归档),
     Route("/api/窗贯验", api_贯验列表),
     Route("/api/夹具", api_夹具),
     Route("/api/观测点/装载", api_装载, methods=["POST"]),

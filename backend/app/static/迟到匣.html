@@ -6,6 +6,12 @@
   <title>迟到匣 · 潮切</title>
   <link rel="stylesheet" href="/styles.css"/>
   <script src="/common.js"></script>
+  <style>
+    .升格台 { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+    .升格台 label { display:flex; flex-direction:column; font-size:12px; color:#666; gap:4px; }
+    .升格台 input { padding:7px 9px; border:1px solid #cfd6e4; border-radius:8px; min-width:170px; }
+    .双表 { display:grid; grid-template-columns:1fr; gap:18px; }
+  </style>
 </head>
 <body>
   <div class="壳">
@@ -23,7 +29,7 @@
         <div class="点"><b>关窗</b>物化切片账</div>
         <div class="点"><b>贯验</b>缓冲↔切片互证</div>
       </div>
-      
+
       <nav class="侧链">
         <a href="/" >潮切台</a>
         <a href="/观测流.html" >观测流</a>
@@ -39,22 +45,87 @@
     <main class="主区">
       <header class="页头">
         <h1>迟到匣</h1>
-        <p>事件时落在窗外的观测点旁路。基线当场进匣，不入缓冲。</p>
+        <p>事件时落在窗外的观测点旁路。模块「迟到升格回放」按原事件时重判目标窗：命中则缓冲增行、匣删行、归档钉指纹；出窗留匣。</p>
       </header>
 
       <section class="卷">
-        <div class="表绕"><table><thead><tr><th>编号</th><th>事件编号</th><th>运单键</th><th>原因</th><th>事件时</th></tr></thead><tbody id="表"></tbody></table></div>
+        <h2>升格回放台</h2>
+        <div class="升格台">
+          <label>目标窗号<input id="窗号" placeholder="W-next"/></label>
+          <label>窗起（含）<input id="窗起" placeholder="2026-11-24T01:00:00Z"/></label>
+          <label>窗止（不含）<input id="窗止" placeholder="2026-11-24T02:00:00Z"/></label>
+          <button class="按钮 青" id="升格">按原事件时升格回放</button>
+          <span class="说明" id="升格回执">留空目标窗则按窗规当前窗重判。</span>
+        </div>
+        <p class="说明">同票事务：读匣→写缓冲→清匣→钉指纹同成败；RLock 与装载串行，并发不双计。升格成功的行不在现行匣，只在下方归档轨可查。</p>
       </section>
-      <section class="卷"><div class="双栏"><p class="说明">迟到匣吃出窗事件。空桩「迟到升格回放」可再开，基线只保留旁路。</p><div class="侧注">行业皮：物流网点。拓扑：单流入窗，不是双轨。</div></div></section>
+
+      <section class="卷 双表">
+        <div>
+          <h2>现行迟到匣（升格命中即删行）</h2>
+          <div class="表绕"><table><thead><tr><th>编号</th><th>事件编号</th><th>运单键</th><th>原因</th><th>事件时</th><th>只读重判</th></tr></thead><tbody id="表"></tbody></table></div>
+        </div>
+        <div>
+          <h2>升格归档（只读轨 · 升格指纹）</h2>
+          <div class="表绕"><table><thead><tr><th>归档键</th><th>事件编号</th><th>原事件时</th><th>目标窗</th><th>升格指纹</th></tr></thead><tbody id="归档表"></tbody></table></div>
+        </div>
+      </section>
+      <section class="卷"><div class="双栏"><p class="说明">两路物理分离：现行匣只留未升格行；归档只存已升格行。禁止只改匣角标——这里是真删行 + 归档留痕。</p><div class="侧注">行业皮：物流网点。拓扑：单流入窗，不是双轨。</div></div></section>
       <script>
-      (async () => {
-        const rows = await 潮切.getJSON("/api/迟到匣");
+      function 目标窗体() {
+        const 号 = document.getElementById("窗号").value.trim();
+        const 起 = document.getElementById("窗起").value.trim();
+        const 止 = document.getElementById("窗止").value.trim();
+        if (!号 && !起 && !止) return null;
+        return { "窗号": 号, "窗起": 起, "窗止": 止 };
+      }
+      async function 载入() {
+        const [rows, 归档] = await Promise.all([
+          潮切.getJSON("/api/迟到匣"),
+          潮切.getJSON("/api/迟到匣/升格归档"),
+        ]);
         const tb = document.getElementById("表");
-        if (!rows.length) { tb.innerHTML = `<tr><td colspan="5">${潮切.空态("迟到匣为空。回潮切台灌迟到样例。")}</td></tr>`; return; }
-        for (const r of rows) {
-          tb.appendChild(潮切.行(`<td>${r.编号}</td><td>${潮切.安全文本(r.事件编号)}</td><td>${潮切.安全文本(r.运单键)}</td><td>${潮切.徽章(r.原因,"警")}</td><td>${潮切.安全文本(r.事件时)}</td>`));
+        tb.innerHTML = "";
+        if (!rows.length) {
+          tb.innerHTML = `<tr><td colspan="6">${潮切.空态("现行迟到匣为空：要么无迟到，要么已升格删行进归档。")}</td></tr>`;
+        } else {
+          for (const r of rows) {
+            const btn = `<button class="按钮 次" data-id="${潮切.安全文本(r.事件编号)}">只读重判</button>`;
+            tb.appendChild(潮切.行(`<td>${r.编号}</td><td>${潮切.安全文本(r.事件编号)}</td><td>${潮切.安全文本(r.运单键)}</td><td>${潮切.徽章(r.原因,"警")}</td><td>${潮切.安全文本(r.事件时)}</td><td>${btn}</td>`));
+          }
         }
-      })();
+        const ab = document.getElementById("归档表");
+        ab.innerHTML = "";
+        if (!归档.length) {
+          ab.innerHTML = `<tr><td colspan="5">${潮切.空态("暂无升格归档。")}</td></tr>`;
+        } else {
+          for (const a of 归档) {
+            ab.appendChild(潮切.行(`<td>${潮切.安全文本(a.归档键)}</td><td>${潮切.安全文本(a.事件编号)}</td><td>${潮切.安全文本(a.原事件时)}</td><td>${潮切.徽章(a.目标窗号,"好")}</td><td><code>${潮切.安全文本(a.升格指纹)}</code></td>`));
+          }
+        }
+      }
+      document.getElementById("升格").onclick = async () => {
+        const 回执 = document.getElementById("升格回执");
+        try {
+          const 体 = 目标窗体();
+          const r = await 潮切.postJSON("/api/迟到匣/升格回放", 体 ? { "目标窗": 体 } : {});
+          回执.textContent = `升格 ${r.升格} 行进窗 ${r.目标窗}；留匣 ${r.留匣} 行。`;
+          await 载入();
+        } catch (e) { 回执.textContent = "升格失败：" + e.message; }
+      };
+      document.getElementById("表").addEventListener("click", async (ev) => {
+        const btn = ev.target.closest("button[data-id]");
+        if (!btn) return;
+        const 体 = 目标窗体();
+        const q = new URLSearchParams({ "事件编号": btn.dataset.id });
+        if (体) { q.set("窗号", 体["窗号"] || ""); q.set("窗起", 体["窗起"] || ""); q.set("窗止", 体["窗止"] || ""); }
+        try {
+          const r = await 潮切.getJSON("/api/迟到匣/升格只读?" + q.toString());
+          btn.textContent = r.valid ? "valid✓" : "出窗✗";
+          btn.title = `状态=${r.状态} 归档键=${r.归档键 || "无"}`;
+        } catch (e) { btn.textContent = "重判失败"; }
+      });
+      载入();
       </script>
 
     </main>

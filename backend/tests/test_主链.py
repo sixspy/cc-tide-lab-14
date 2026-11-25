@@ -3,16 +3,24 @@ import os
 import tempfile
 import pytest
 
-_tmp = tempfile.mkdtemp()
-os.environ["数据目录"] = _tmp
+os.environ.setdefault("数据目录", str(Path(tempfile.gettempdir()) / "tide-test-db"))
 os.environ["夹具目录"] = str(Path(__file__).resolve().parents[2] / "fixtures")
 
 from app import seed
 from app.services import 装载, 关窗, 贯验, 目录, 时间, 校验, 夹具
+from app.db import 连接
 
 
 @pytest.fixture(autouse=True)
 def _db():
+    # 固定测试库，每测清表重建，避免跨文件/跨用例数据渗漏
+    conn = 连接()
+    try:
+        for t in ("窗贯验", "关窗批次", "装载批次", "入窗缓冲", "窗切片账", "迟到匣", "观测点", "升格归档", "窗规", "网点源"):
+            conn.execute(f"DROP TABLE IF EXISTS {t}")
+        conn.commit()
+    finally:
+        conn.close()
     seed.初始化库()
     yield
 
